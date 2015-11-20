@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style type="text/css">
+        #c{
+            border: 1px solid red;
+        }
+    </style>
+</head>
+<body>
+    <input type="checkbox" id="er" >橡皮
+    <br>
+    颜色：黑<input type="radio" name="color" value="black" checked>红<input type="radio" name="color" value="red">蓝<input type="radio" name="color" value="blue">
+    <br>
+    <canvas id="c" width="400" height="400"></canvas>
+    <br>
+    <button id="clear">清空画布</button>
+
+    <script src="http://cdn.bootcss.com/jquery/3.0.0-alpha1/jquery.min.js"></script>
+    <script type="text/javascript" src="/socket.io/socket.io.js"></script>
+
+    <script type="text/javascript">
+        var socket = io.connect();
+        //从服务器获得消息
+        socket.on("message", function(msg){
+            if(msg.name == "load"){
+                for(var m in msg.msgs){
+                    dealMsg(m);
+                }
+            }else{
+                dealMsg(msg);
+            }
+        });
+        socket.on("load", function(data){
+            for(var i = 0; i < data.msgs.length; i++){
+                var m = data.msgs[i];
+                dealMsg(m);
+            }
+        });
+
+        function dealMsg(msg){
+            if(msg.name == "line"){
+                line(msg.x1, msg.y1, msg.x2, msg.y2, msg.color);
+            }else if(msg.name == "text"){
+                text(msg.x, msg.y, msg.text, msg.color);
+            }else if(msg.name == "eraser"){
+                eraser(msg.x1, msg.y1, msg.x2, msg.y2);
+            }else if(msg.name == "clear"){
+                clear();
+            }
+        }
+        
+        var er = $("#er");
+        var c = $("#c");
+        var cxt = c[0].getContext("2d");
+
+        var drawing = false;
+        var drawStartX = 0;
+        var drawStartY = 0;
+        var drawEndX = 0;
+        var drawEndY = 0;
+
+        var ering = false;
+        var erStartX = 0;
+        var erStartY = 0;
+        var erEndX = 0;
+        var erEndY = 0;
+
+        c.mousedown(function(e){
+            if(!er.is(":checked")){
+                drawStartX = e.pageX - this.offsetLeft;
+                drawStartY = e.pageY - this.offsetTop;
+                drawing = true;
+            }else{
+                erStartX = e.pageX - this.offsetLeft;
+                erStartY = e.pageY - this.offsetTop;
+                ering = true;
+            }
+        });
+
+        c.mouseup(function(e){
+            if(!er.is(":checked")){
+                drawEndX = e.pageX - this.offsetLeft;
+                drawEndY = e.pageY - this.offsetTop;
+                drawing = false;
+                socket.emit("line", {
+                    x1 : drawStartX,
+                    y1 : drawStartY,
+                    x2 : drawEndX,
+                    y2 : drawEndY,
+                    color : color()
+                });
+            }else{
+                erEndX = e.pageX - this.offsetLeft;
+                erEndY = e.pageY - this.offsetTop;
+                ering = false;
+                socket.emit("eraser", {
+                    x1 : erStartX,
+                    y1 : erStartY,
+                    x2 : erEndX,
+                    y2 : erEndY
+                });
+            }
+        });
+
+        c.dblclick(function(e){
+            var tx = e.pageX - this.offsetLeft;
+            var ty = e.pageY - this.offsetTop;
+            var txt = prompt("输入文字");
+            socket.emit("text", {
+                x : tx,
+                y : ty,
+                text : txt,
+                color : color()
+            });
+        });
+
+        $("#clear").click(function(){
+            if(confirm("确定要清空画布？")){
+                socket.emit("clear", {
+
+                });
+            }
+        });
+
+
+        //绘制....
+        //绘制直线
+        function line(x1, y1, x2, y2, c){
+            cxt.strokeStyle = c;
+            cxt.beginPath();
+            cxt.moveTo(x1, y1);
+            cxt.lineTo(x2, y2);
+            cxt.closePath();
+            cxt.stroke();
+        }
+
+        //绘制文字
+        function text(x, y, t, c){
+            cxt.fillStyle = c;
+            cxt.fillText(t, x, y);
+        }
+
+        //橡皮擦（实际是绘制白色的矩形）
+        function eraser(x1, y1, x2, y2){
+            cxt.fillStyle = "#FFFFFF";
+            cxt.fillRect(x1, y1, x2 - x1, y2 - y1);
+        }
+
+        //清空画布
+        function clear(){
+            cxt.clearRect(0, 0, 400, 400);
+        }
+
+
+
+
+        function color(){
+            return $("[name=color]:checked").val();
+        }
+
+
+
+        //网页加载后读取已画图进度
+        $(function(){
+            socket.emit("load",{
+
+            });
+        });
+    </script>
+</body>
+</html>
